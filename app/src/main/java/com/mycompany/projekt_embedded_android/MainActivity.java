@@ -12,6 +12,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
@@ -44,15 +45,19 @@ public class MainActivity extends AppCompatActivity {
 
         /* Initialize and Start Audio Processing Thread*/
         audioProcessingThread = new AudioProcessingThread();
-        audioProcessingThread.start();
 
-        /* Askin for Request */
+
+        /* Askin for Record_Audio Permission if we dont have this Permission */
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             // Permission is not granted
             Log.i("Main","No Audio Permission");
 
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO},MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
+        }else{
+
+            /* If we have the permission then start the Task */
+            audioProcessingThread.start();
         }
     }
 
@@ -65,11 +70,17 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // permission was granted, yay! Do the
+                    // permission was granted, yay!
+
+                    /* If we have the permission then start the Task */
+                    audioProcessingThread.start();
+
 
                 } else {
                     // permission denied, boo! Disable the
                     // functionality that depends on this permission.
+
+                    Toast.makeText(this,"This app does not work correctly without this permission.",Toast.LENGTH_LONG);
                 }
                 return;
             }
@@ -118,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
             //}
 
             /* Create Audio Buffer*/
-            short[] audioBuffer = new short[bufferSize / 2];
+            final short[] audioBuffer = new short[bufferSize / 2];
 
             /* Create Audio Record */
             record = new AudioRecord(MediaRecorder.AudioSource.DEFAULT,
@@ -146,12 +157,13 @@ public class MainActivity extends AppCompatActivity {
 
                 /* Process the Buffer */
 
+
                 /* Update the UI Elements. */
                 MainActivity.this.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         /* Reset the data of the graph */
-                        timeSerie.resetData(generateData());
+                        timeSerie.resetData(generateData(audioBuffer, SAMPLE_RATE));
                         Log.i(LOG_TAG,"hi");
 
                     }
@@ -165,19 +177,25 @@ public class MainActivity extends AppCompatActivity {
 
             Log.v(LOG_TAG, String.format("Recording stopped. Samples read: %d", shortsRead));
         }
-    }
 
-    private DataPoint[] generateData() {
-        int count = 30;
-        DataPoint[] values = new DataPoint[count];
+        /* This function creates a datapoint array out of a short array */
+        private DataPoint[] generateData(short data[], int fa) {
+            int count = data.length;
+            DataPoint[] values = new DataPoint[count];
 
-        for (int i=0; i<count; i++) {
-            double x = i;
-            double y = Math.sin(i+2);
-            DataPoint v = new DataPoint(x, y);
-            values[i] = v;
+
+
+            for (int i=0; i<count; i++) {
+                double x = (double)i / (double)fa;
+                double y = data[i];
+                DataPoint v = new DataPoint(x, y);
+                values[i] = v;
+            }
+
+            return values;
         }
-        return values;
     }
+
+
 
 }

@@ -7,13 +7,10 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity" >
 
-    <com.jjoe64.graphview.helper.GraphViewXML
-        android:id="@+id/graph"
+    <com.jjoe64.graphview.GraphView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:seriesData="0=5;2=5;3=0;4=2"
-        app:seriesType="line"
-        app:seriesColor="#ee0000" />
+        android:layout_height="200dip"
+        android:id="@+id/graph" />
 
 </LinearLayout>
 
