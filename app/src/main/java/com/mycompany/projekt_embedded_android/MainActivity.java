@@ -11,7 +11,6 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.jjoe64.graphview.GraphView;
@@ -25,8 +24,10 @@ public class MainActivity extends AppCompatActivity {
         System.loadLibrary("native-lib");
     }
 
-    GraphView graph;
+    GraphView graphTime;
     LineGraphSeries<DataPoint> timeSerie;
+    GraphView graphFreq;
+    LineGraphSeries<DataPoint> freqSerie;
 
     AudioProcessingThread audioProcessingThread;
 
@@ -38,10 +39,20 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        /* initialize Graph*/
-        graph = (GraphView) findViewById(R.id.graph);
+        /* initialize Graphs*/
+        graphTime = (GraphView) findViewById(R.id.graphTime);
+        graphTime.setTitle("Audio Signal");
         timeSerie = new LineGraphSeries<>();
-        graph.addSeries(timeSerie);
+        timeSerie.setThickness(1);
+        timeSerie.setTitle("Time Serie");
+        graphTime.addSeries(timeSerie);
+
+        /* initialize Graphs*/
+        graphFreq = (GraphView) findViewById(R.id.graphFrequenzy);
+        freqSerie = new LineGraphSeries<>();
+        freqSerie.setThickness(1);
+        freqSerie.setTitle("Frequency Serie");
+        graphFreq.addSeries(timeSerie);
 
         /* Initialize and Start Audio Processing Thread*/
         audioProcessingThread = new AudioProcessingThread();
@@ -95,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    public native String stringFromJNI();
+    //public native String stringFromJNI();
 
 
 
@@ -111,8 +122,19 @@ public class MainActivity extends AppCompatActivity {
         final int SAMPLE_RATE = 44100; // The sampling rate
         boolean mShouldContinue = true; // Indicates if recording / playback should stop
 
-        short full_buffer[] = new short[SAMPLE_RATE*5];
-        int bufferSize;
+        double full_buffer[] = new double[SAMPLE_RATE*1];
+        int bufferSize, audiBufferSize;
+
+        int fftBufferSize = (int)Math.pow(2,14);
+
+        double preFFTBuffer[] = new double[fftBufferSize];
+        double fftBuffer[] = new double[fftBufferSize];;
+
+        FFT Fft = new FFT(fftBufferSize);
+
+
+        DataPoint dataToPlot[];
+
         AudioRecord record;
 
 
@@ -122,14 +144,16 @@ public class MainActivity extends AppCompatActivity {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
 
             /* Calc buffersize needed */
-            //bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            bufferSize = 5 * AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
 
-            //if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
-                bufferSize = SAMPLE_RATE * 2;
-            //}
+            if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
+                bufferSize = (int)(SAMPLE_RATE * 1);
+            }
+
+            audiBufferSize = bufferSize/2;
 
             /* Create Audio Buffer*/
-            final short[] audioBuffer = new short[bufferSize / 2];
+            final short[] audioBuffer = new short[audiBufferSize];
 
             /* Create Audio Record */
             record = new AudioRecord(MediaRecorder.AudioSource.DEFAULT,
@@ -157,14 +181,44 @@ public class MainActivity extends AppCompatActivity {
 
                 /* Process the Buffer */
 
+                // Shift full buffer
+                int i;
+                for( i=0; i < full_buffer.length - 1 - audioBuffer.length; i++){
+                    full_buffer[i] = full_buffer[i+audioBuffer.length];
+                }
+
+                // Copy audio Buffer into full buffer
+                for( i =0; i < audioBuffer.length-1; i++){
+                    full_buffer[full_buffer.length-audioBuffer.length+i] = (double)audioBuffer[i];
+                }
+
+                // Extract preFft Buffer
+                for( i=0; i < preFFTBuffer.length; i++){
+                    preFFTBuffer[i] = full_buffer[ full_buffer.length - preFFTBuffer.length+i];
+                }
+
+                // Make FFT
+                Fft.fft(preFFTBuffer,fftBuffer);
+
+
+
+
+                dataToPlot = generateData(fftBuffer, SAMPLE_RATE);
+
+                Log.i(LOG_TAG,"AudioBuffer Size: "+ (float)audioBuffer.length/(float)SAMPLE_RATE);
+                Log.i(LOG_TAG,"FullBuffer Size: "+ (float)full_buffer.length/(float)SAMPLE_RATE);
+
+
+
+
 
                 /* Update the UI Elements. */
                 MainActivity.this.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        /* Reset the data of the graph */
-                        timeSerie.resetData(generateData(audioBuffer, SAMPLE_RATE));
-                        Log.i(LOG_TAG,"hi");
+                        /* Reset the data of the graphTime */
+                        timeSerie.resetData(dataToPlot);
+
 
                     }
                 });
@@ -179,14 +233,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         /* This function creates a datapoint array out of a short array */
-        private DataPoint[] generateData(short data[], int fa) {
+        private DataPoint[] generateData(double data[], int fa) {
             int count = data.length;
             DataPoint[] values = new DataPoint[count];
 
 
 
             for (int i=0; i<count; i++) {
-                double x = (double)i / (double)fa;
+                double x = (double)i;
                 double y = data[i];
                 DataPoint v = new DataPoint(x, y);
                 values[i] = v;
